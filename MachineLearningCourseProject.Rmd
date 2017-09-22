@@ -1,0 +1,129 @@
+---
+title: "Course Project"
+author: "Claudia Terrien"
+date: "September 21, 2017"
+output: html_document
+---
+## Machine Learning - course project
+
+### Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = FALSE, message=FALSE )
+
+library("caret")
+library("dplyr")
+
+```
+
+### Exploring the data
+
+```{r exploring, echo=TRUE, warning=FALSE, message=FALSE }
+
+trainingDataSet <- read.csv("pml-training.csv", na.strings =c("","NA"), stringsAsFactors=F, header = TRUE, sep = ",")
+testingDataSet <- read.csv("pml-testing.csv", na.strings =c("","NA"), stringsAsFactors=F, header = TRUE, sep = ",")
+
+str(trainingDataSet)
+#summary(trainingDataSet)
+
+# Plotting some data
+featurePlot(x=trainingDataSet[,c("raw_timestamp_part_1","raw_timestamp_part_2","cvtd_timestamp","new_window","classe")],
+            y=trainingDataSet$classe,
+            plot="pairs")
+
+```
+
+### Data transformation
+
+A huge amount of columns have empty values. It is very important to find a way to automatically remove all columns with more than 5% of empty values. The missing 5% of data can be populated with median amounts. 
+
+There is a total of 105 columns with mopre than 5% empty values, all of them were removed.
+
+For the remained columns, the script checked the amount of empty values. Since, there was not empty values anymore, no further treatment was necessary.
+
+Other columns removed:
+- index
+- user name
+- time stamp.
+
+```{r transformation, echo=TRUE, warning=FALSE, message=FALSE }
+# Removing columns with more than 5% of NAs
+percentage.NA <- sapply(1:ncol(trainingDataSet), function(i) {sum(is.na(trainingDataSet[,i]))/nrow(trainingDataSet)})
+columns.to.keep <- colnames(trainingDataSet)[which(percentage.NA <= 0.05)]
+training <- select(trainingDataSet, one_of(columns.to.keep))
+testing <- select(testingDataSet, one_of(columns.to.keep))
+
+# Checking the amount of NAs to see which columns need treatment
+sapply(1:ncol(training), function(i) {sum(is.na(training[,i]))})
+sapply(1:ncol(testing), function(i) {sum(is.na(testing[,i]))})
+
+# removing first columns because they are not relevant - related to user or datastamp
+training$X <- NULL
+training$user_name <- NULL 
+training$raw_timestamp_part_1 <- NULL
+training$raw_timestamp_part_2 <- NULL
+training$cvtd_timestamp <- NULL
+
+testing$X <- NULL
+testing$user_name <- NULL 
+testing$raw_timestamp_part_1 <- NULL
+testing$raw_timestamp_part_2 <- NULL
+testing$cvtd_timestamp <- NULL
+
+# Transforming column class in a factor
+training$classe <- as.factor(training$classe)
+
+
+```
+
+### Model
+
+The training file was splitted between training set (75%) and validation set (25%). In this way, the model can be tested on the validation set before applying to the test set and overfitting is avoided.
+
+The algorithm used was random forest with cross-validation.
+
+```{r model, echo=TRUE, warning=FALSE, message=FALSE  }
+
+# Data slicing
+set.seed(1000)
+inTrain = createDataPartition(training$classe, p = 3/4)[[1]]
+trainingcv = training[ inTrain,]
+validationcv = training[-inTrain,]
+
+modFit <- train(as.factor(classe) ~., method="rf",data=trainingcv, trControl=trainControl(method="cv"))
+
+validationcv.predict <- predict(modFit, validationcv)
+```
+
+
+### Errors
+
+The result model was applied to the validation set and the errors were calculated. The model has a very high accuracy, 0.9978.
+
+```{r errors, echo=TRUE, warning=FALSE, message=FALSE  }
+# Confusion matrix
+confusion.matrix <- confusionMatrix(validationcv.predict, validationcv$classe)
+confusion.matrix
+
+
+```
+### Prediction
+
+The model was applied to the test set.
+
+```{r prediction, echo=TRUE, warning=FALSE, message=FALSE  }
+
+# Prediction
+testing$predict <- predict(modFit, testing)
+
+```
+
+### Conclusion
+
+The most challenge part on this project was to remove all empty columns. Since there were more than 100 empty columns, a function was necessary.
+
+The result model presents a high accurracy and it should work well in the data set. The validation of the results will be done after I submit this report.
+
+
+
